@@ -1,0 +1,150 @@
+local TOP_HEIGHT = 0.5
+local TARGET_PART_NAME = "Part"
+local TAG_NAME = "TopBrickApplied"
+local CREATED_BRICK_TAG = "GeneratedTopBrick"
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local localPlayer = Players.LocalPlayer
+local active = false
+local currentTransparency = 0.1
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "System_Final_Draggable"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 220, 0, 160)
+mainFrame.Position = UDim2.new(0.5, -110, 0.5, -80)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 28)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = false
+mainFrame.Parent = screenGui
+
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+
+local stroke = Instance.new("UIStroke", mainFrame)
+stroke.Thickness = 2
+stroke.Color = Color3.fromRGB(0, 150, 255)
+
+local titleLabel = Instance.new("TextLabel", mainFrame)
+titleLabel.Size = UDim2.new(1, 0, 0, 40)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "SYSTEM CONTROL V7"
+titleLabel.TextColor3 = Color3.new(1, 1, 1)
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 13
+
+local button = Instance.new("TextButton", mainFrame)
+button.Size = UDim2.new(0.9, 0, 0, 42)
+button.Position = UDim2.new(0.05, 0, 0.28, 0)
+button.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+button.Text = "STATUS: INACTIVE"
+button.TextColor3 = Color3.new(1, 1, 1)
+button.Font = Enum.Font.GothamSemibold
+Instance.new("UICorner", button)
+
+local transButton = Instance.new("TextButton", mainFrame)
+transButton.Size = UDim2.new(0.9, 0, 0, 42)
+transButton.Position = UDim2.new(0.05, 0, 0.62, 0)
+transButton.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+transButton.Text = "OPACITY: 0.1"
+transButton.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+transButton.Font = Enum.Font.Gotham
+Instance.new("UICorner", transButton)
+
+local dragToggle = nil
+local dragSpeed = 0.15
+local dragStart = nil
+local startPos = nil
+
+local function updateInput(input)
+    local delta = input.Position - dragStart
+    local position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    TweenService:Create(mainFrame, TweenInfo.new(dragSpeed), {Position = position}):Play()
+end
+
+mainFrame.InputBegan:Connect(function(input)
+    if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+        dragToggle = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragToggle = false
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragToggle and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        updateInput(input)
+    end
+end)
+
+local function spawnTopBrick(target)
+    if CollectionService:HasTag(target, TAG_NAME) then return end
+    local topBrick = Instance.new("Part")
+    topBrick.Name = "TopBrick"
+    topBrick.Size = Vector3.new(target.Size.X, TOP_HEIGHT, target.Size.Z)
+    topBrick.Anchored = true
+    topBrick.CanCollide = false
+    topBrick.BrickColor = BrickColor.new("Bright red")
+    topBrick.Material = Enum.Material.Glass
+    topBrick.Transparency = currentTransparency
+    topBrick.CFrame = target.CFrame * CFrame.new(0, (target.Size.Y/2) + (TOP_HEIGHT/2), 0)
+    topBrick.Parent = game.Workspace
+    CollectionService:AddTag(target, TAG_NAME)
+    CollectionService:AddTag(topBrick, CREATED_BRICK_TAG)
+end
+
+transButton.MouseButton1Click:Connect(function()
+    currentTransparency = currentTransparency + 0.1
+    if currentTransparency > 1.01 then
+        currentTransparency = 0.1
+    end
+    local cleanVal = math.floor(currentTransparency * 10 + 0.5) / 10
+    transButton.Text = "OPACITY: " .. tostring(cleanVal)
+    for _, brick in ipairs(CollectionService:GetTagged(CREATED_BRICK_TAG)) do
+        brick.Transparency = cleanVal
+    end
+end)
+
+button.MouseButton1Click:Connect(function()
+    active = not active
+    local targetColor = active and Color3.fromRGB(50, 180, 100) or Color3.fromRGB(180, 50, 50)
+    button.Text = active and "STATUS: ACTIVE" or "STATUS: INACTIVE"
+    TweenService:Create(button, TweenInfo.new(0.3), {BackgroundColor3 = targetColor}):Play()
+    
+    if active then
+        task.spawn(function()
+            for _, obj in ipairs(game.Workspace:GetDescendants()) do
+                if obj:IsA("BasePart") and obj.Name == TARGET_PART_NAME then
+                    spawnTopBrick(obj)
+                end
+            end
+        end)
+    else
+        for _, b in ipairs(CollectionService:GetTagged(CREATED_BRICK_TAG)) do b:Destroy() end
+        for _, t in ipairs(CollectionService:GetTagged(TAG_NAME)) do CollectionService:RemoveTag(t, TAG_NAME) end
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if active then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.Character then
+                for _, part in ipairs(player.Character:GetDescendants()) do
+                    if (part:IsA("BasePart") or part:IsA("Decal")) and part.Transparency > 0 then
+                        part.Transparency = 0
+                    end
+                end
+            end
+        end
+    end
+end)
